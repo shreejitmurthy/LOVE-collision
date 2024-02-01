@@ -43,5 +43,3 @@ function love.draw()
     world:Draw()
 end
 ```
-
-And that looks like this:
