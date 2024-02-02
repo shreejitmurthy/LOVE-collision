@@ -32,13 +32,16 @@ PhysicsWorld.__index = PhysicsWorld
 entity_types = {"static", "dynamic"}
 Entity = {
     etype = "",
-    colour = {r = 1, g = 1, b = 1},
+    colour = {1, 1, 1},
+    alpha = 1,  -- alpha is subject to change and easier to not keep in colour table
     x = 0,
     y = 0,
+    lastX = 0,
+    lastY = 0,
+    idleTimer = 0,
+    isIdle = false,
     velocity = {x = 0, y = 0},
-    mtype = "",
     drawn = false,
-    alpha = 1
 }
 
 local function initEntity(type, x, y)
@@ -46,6 +49,7 @@ local function initEntity(type, x, y)
     self.etype = type
     self.velocity = {x = x, y = x}
     self.x, self.y = x, y
+    self.lastX, self.lastY = self.x, self.y
     return self
 end
 
@@ -54,11 +58,33 @@ function Entity:Move(dx, dy)
     self.y = self.y + dy
 end
 
+function Entity:Update(dt)
+    if self.etype ~= "static" then
+        self.idleTimer = self.idleTimer + dt
+
+        if self.x ~= self.lastX or self.y ~= self.lastY then
+            self.idleTimer = 0
+            self.lastX, self.lastY = self.x, self.y
+            self.isIdle = false
+        end
+    
+        if self.idleTimer > 3 and not self.isIdle then
+            self.isIdle = true
+        end
+    
+        if self.isIdle then
+            self.colour = {0.5, 0, 0.5}
+        else
+            self.colour = {1, 1, 1}
+        end
+    end
+end
+
 function Entity:Draw(alpha, disable_drawn_flag)
     self.alpha = alpha
 
     love.graphics.setLineWidth(2)
-    love.graphics.setColor(self.colour.r, self.colour.g, self.colour.b, self.alpha)
+    love.graphics.setColor(self.colour, self.alpha)
     love.graphics.rectangle("line", self.x, self.y, self.width, self.height)
     love.graphics.reset()
 
@@ -87,7 +113,7 @@ function PhysicsWorld:NewEntity(entity_type, x, y, width, height)
     return entity
 end
 
-function PhysicsWorld:UpdateCollisionDetection()
+function PhysicsWorld:UpdateCollisionDetection(dt)
     collisionInfo = nil
     local n = #self.entities
     for i = 1, n - 1 do
@@ -99,32 +125,36 @@ function PhysicsWorld:UpdateCollisionDetection()
             -- local dynamic_rect = (r1.etype == "dynamic" and r1) or
             -- (r2.etype == "dynamic" and r2)
             local dynamic_rect = r1
+            dynamic_rect:Update(dt)
 
-            if hit then
-                collisionInfo = {i, j}
-                if dynamic_rect then
-                    local dx = (dynamic_rect.x + dynamic_rect.width/2) - (r2.x + r2.width/2)
-                    local dy = (dynamic_rect.y + dynamic_rect.height/2) - (r2.y + r2.height/2)
-                    local overlapX = (dynamic_rect.width + r2.width) / 2 - math.abs(dx)
-                    local overlapY = (dynamic_rect.height + r2.height) / 2 - math.abs(dy)
-
-                    -- Adjust the position of the dynamic entity
-                    if overlapX < overlapY then
-                        if dx > 0 then
-                            dynamic_rect.x = dynamic_rect.x + overlapX
+            if dynamic_rect.isIdle == false then
+                if hit then
+                    collisionInfo = {i, j, dynamic_rect.isIdle}
+                    if dynamic_rect then
+                        local dx = (dynamic_rect.x + dynamic_rect.width/2) - (r2.x + r2.width/2)
+                        local dy = (dynamic_rect.y + dynamic_rect.height/2) - (r2.y + r2.height/2)
+                        local overlapX = (dynamic_rect.width + r2.width) / 2 - math.abs(dx)
+                        local overlapY = (dynamic_rect.height + r2.height) / 2 - math.abs(dy)
+    
+                        -- Adjust the position of the dynamic entity
+                        if overlapX < overlapY then
+                            if dx > 0 then
+                                dynamic_rect.x = dynamic_rect.x + overlapX
+                            else
+                                dynamic_rect.x = dynamic_rect.x - overlapX
+                            end
                         else
-                            dynamic_rect.x = dynamic_rect.x - overlapX
-                        end
-                    else
-                        if dy > 0 then
-                            dynamic_rect.y = dynamic_rect.y + overlapY
-                        else
-                            dynamic_rect.y = dynamic_rect.y - overlapY
+                            if dy > 0 then
+                                dynamic_rect.y = dynamic_rect.y + overlapY
+                            else
+                                dynamic_rect.y = dynamic_rect.y - overlapY
+                            end
                         end
                     end
+                    break
                 end
-                break
             end
+
         end
         if collisionInfo then 
             break 
@@ -134,7 +164,11 @@ end
 
 local function getCollisionInfo(collisionInfo)
     if collisionInfo then
-        return string.format("Collision between entities: %d / %d", collisionInfo[1], collisionInfo[2])
+        if collisionInfo[3] then
+            return "Disabled collision checks"
+        else
+            return string.format("Collision between entities: %d / %d", collisionInfo[1], collisionInfo[2])
+        end
     else
         return "No collision detected"
     end
