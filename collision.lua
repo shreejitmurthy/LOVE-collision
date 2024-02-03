@@ -128,7 +128,7 @@ function Entity:Draw(alpha, disable_drawn_flag)
 end
 
 
-function PhysicsWorld.New(gravity)
+function newWorld(gravity)
     local self = setmetatable({}, PhysicsWorld)
     if gravity then self.gravity = gravity end
     return self
